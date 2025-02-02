@@ -5,27 +5,27 @@ from time import perf_counter, sleep
 class R2APanda(IR2A):
     def __init__(self, id):
         IR2A.__init__(self, id)
+        self.alpha = 0.2
         self.w = 0.3
         self.k = 0.14
         self.beta = 0.2
-        self.tempo_ultima_solicitacao = 0
-        self.xtn_m1 = 0 # ~x[n-1] - last TCP throughput measured
-        self.xcn_m1 = 0 # ^x[n-1] - last target throughput
-        self.tamanho_utlimo_buffer = 0
-        self.lista_segmentos = []
-        self.tempo_proxima_solicitacao = 0
-        self.taxa_transferencias = []
-        self.taxa_transferencias_estimadas = []
+        self.xtn_m1 = 0 
+        self.xcn_m1 = 0 
         self.ycn = 0 # Versão filtrada do throughput
         self.ycn_m1 = 0
+        self.tamanho_utlimo_buffer = 0
+        self.lista_segmentos = []
+        self.taxa_transferencias = []
+        self.taxa_transferencias_estimadas = []
+        self.tempo_ultima_solicitacao = 0
         self.tempo_ultima_solicitação_global = 0
-        self.alpha = 0.2
+        self.tempo_proxima_solicitacao = 0
 
     
     def handle_xml_request(self, msg):
         """ Sends the XML request to the ConnectionHandler. """
 
-        self.tempo_ultima_solicitacao = perf_counter() # used to calculate the first throughput
+        self.tempo_ultima_solicitacao = perf_counter() 
         self.send_down(msg)
 
     def handle_xml_response(self, msg):
@@ -55,7 +55,6 @@ class R2APanda(IR2A):
 
     
     def handle_segment_size_request(self, msg):
-
         # tempo decorrido desde a ultima solicitação
         tempo_de_espera = perf_counter() - self.tempo_ultima_solicitacao
         
@@ -73,24 +72,21 @@ class R2APanda(IR2A):
         print('estimativa aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: ', xcn)
 
         #Suavização
-        self.ycn = (-self.alpha) * self.tempo_ultima_solicitação_global * (self.ycn_m1 - xcn) + self.ycn_m1
+
+        if self.ycn_m1 == 0:
+            self.ycn_m1 = xcn
+            
+        self.ycn = self.alpha * xcn + (1 - self.alpha) * self.ycn_m1
         self.taxa_transferencias_estimadas.append(self.ycn)
-        self.ycn_m1 = self.ycn 
+        self.ycn_m1 = self.ycn
         print('suavização: fffffffffffffffffffff', self.ycn)
         
         #Quantização
-#        melhor_qualidade = max((seg for seg in self.lista_segmentos[0] if seg <= self.ycn), default=None)
-#        if melhor_qualidade is None:
-#            melhor_qualidade=min(self.lista_segmentos)
-#        print('quantização: ssssssssssssssssss', melhor_qualidade)
+        lista_selecionada = min(self.lista_segmentos, key=lambda seg: abs(seg - self.ycn), default=0)
+    
+        msg.add_quality_id(lista_selecionada)
 
-        lista_selecionada = self.lista_segmentos[0]
-        for item in self.lista_segmentos:
-            if self.ycn > item:
-                lista_selecionada = item
-                print("ITEM ", item)
-            else:
-                break
+        print("quantização: sssssssssssssssssssss", lista_selecionada)
 
         #Agendamento
         buffer_minimo = 15
@@ -105,11 +101,10 @@ class R2APanda(IR2A):
         
 
     def handle_segment_size_response(self, msg):
-        print("chegamos na ultima casa")
         self.xtn_m1 = msg.get_bit_length() / (perf_counter() - self.tempo_ultima_solicitacao)
         self.taxa_transferencias.append(self.xtn_m1)
         print("----------------------------------------------------------")
-        senf.send_up(msg)
+        self.send_up(msg)
         pass
 
     def initialize(self):
