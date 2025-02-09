@@ -81,7 +81,12 @@ class R2APanda(IR2A):
         if self.ycn_m1 == 0:
             self.ycn_m1 = xcn
             
+
+        #EWMA adaptado
         self.ycn = self.alpha * xcn + (1 - self.alpha) * self.ycn_m1
+        
+        #EWMA formula original
+        #self.ycn = ((self.alpha - 1) * self.tempo_ultima_solicitação_global * (self.ycn_m1 - xcn)) + self.ycn_m1
         self.taxa_transferencias_estimadas.append(self.ycn)
         self.ycn_m1 = self.ycn
         print('suavização: fffffffffffffffffffff', self.ycn)
@@ -139,7 +144,7 @@ class R2APanda(IR2A):
         plt.xlabel("Tempo (s)")
         plt.ylabel("Qualidade do video")
         plt.grid(True)
-        plt.savefig("grafico_fila.png")
+        plt.savefig("grafico_fila_tempo.png")
     
     def plot_tamanho_buffers(self):
         dados_buffer = self.whiteboard.get_playback_buffer_size()
@@ -151,7 +156,7 @@ class R2APanda(IR2A):
         plt.xlabel("Tempo (s)")
         plt.ylabel("Tamanho do Buffer")
         plt.grid(True)
-        plt.savefig("grafico_buffer.png")
+        plt.savefig("grafico_buffer_tempo.png")
 
     def plot_taxas_transferencia(self):
         tempos = [i for i in range(len(self.taxa_transferencias))]
@@ -163,4 +168,4 @@ class R2APanda(IR2A):
         plt.ylabel("Taxa de Transferência (bits/s)")
         plt.legend()
         plt.grid(True)
-        plt.savefig("grafico_taxas_transferencia.png")
+        plt.savefig("grafico_taxas_transferencia_tempo.png")
