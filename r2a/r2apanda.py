@@ -2,6 +2,10 @@ from r2a.ir2a import IR2A
 from player.parser import *
 from time import perf_counter, sleep
 
+from base.whiteboard import Whiteboard
+
+import matplotlib.pyplot as plt
+
 class R2APanda(IR2A):
     def __init__(self, id):
         IR2A.__init__(self, id)
@@ -20,6 +24,8 @@ class R2APanda(IR2A):
         self.tempo_ultima_solicitacao = 0
         self.tempo_ultima_solicitação_global = 0
         self.tempo_proxima_solicitacao = 0
+
+        self.whiteboard = Whiteboard.get_instance()
 
     
     def handle_xml_request(self, msg):
@@ -48,8 +54,7 @@ class R2APanda(IR2A):
 
         # Adiciona a lista de qualidades do video à lista de listas de qualidades do video
         self.lista_segmentos = parsed_mpd.get_qi()
-
-
+       
         # Proxima função  
         self.send_up(msg)
 
@@ -104,6 +109,16 @@ class R2APanda(IR2A):
         self.xtn_m1 = msg.get_bit_length() / (perf_counter() - self.tempo_ultima_solicitacao)
         self.taxa_transferencias.append(self.xtn_m1)
         print("----------------------------------------------------------")
+        print("Tamanho buffers playbacks", self.whiteboard.get_playback_buffer_size())
+        print("Tamanho Segmento no buffer", self.whiteboard.get_playback_segment_size_time_at_buffer())
+        print("Buffer maximo", self.whiteboard.get_max_buffer_size())
+        print("----------------------------------------------------------")
+        print("----------------------------------------------------------")
+
+        self.plot_filas()
+        self.plot_tamanho_buffers()
+        self.plot_taxas_transferencia()
+
         self.send_up(msg)
         pass
 
@@ -112,3 +127,40 @@ class R2APanda(IR2A):
 
     def finalization(self):
         pass 
+
+    def plot_filas(self):
+        dados = self.whiteboard.get_playback_qi()  # Exemplo: [(tempo1, taxa1), (tempo2, taxa2)]
+        print("KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK", dados)
+        tempos, taxas = zip(*dados) if dados else ([], [])
+
+        plt.figure(figsize=(10, 5))
+        plt.plot(tempos, taxas, marker='o', color='blue')
+        plt.title("Video ao Longo do Tempo")
+        plt.xlabel("Tempo (s)")
+        plt.ylabel("Qualidade do video")
+        plt.grid(True)
+        plt.savefig("grafico_fila.png")
+    
+    def plot_tamanho_buffers(self):
+        dados_buffer = self.whiteboard.get_playback_buffer_size()
+        tempos_buffer, tamanhos_buffer = zip(*dados_buffer) if dados_buffer else ([], [])
+
+        plt.figure(figsize=(10, 5))
+        plt.plot(tempos_buffer, tamanhos_buffer, marker='x', color='red', label="Tamanho do buffer")
+        plt.title("Tamanho do Buffer ao Longo do Tempo")
+        plt.xlabel("Tempo (s)")
+        plt.ylabel("Tamanho do Buffer")
+        plt.grid(True)
+        plt.savefig("grafico_buffer.png")
+
+    def plot_taxas_transferencia(self):
+        tempos = [i for i in range(len(self.taxa_transferencias))]
+        plt.figure(figsize=(10, 5))
+        plt.plot(tempos, self.taxa_transferencias, marker='o', label="Taxa de Transferência Real")
+        plt.plot(tempos, self.taxa_transferencias_estimadas, marker='x', label="Taxa de Transferência Estimada")
+        plt.title("Taxas de Transferência ao Longo do Tempo")
+        plt.xlabel("Tempo (s)")
+        plt.ylabel("Taxa de Transferência (bits/s)")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig("grafico_taxas_transferencia.png")
