@@ -25,6 +25,7 @@ class R2APanda(IR2A):
         self.tempo_ultima_solicitacao = 0
         self.tempo_ultima_solicitação_global = 0
         self.tempo_proxima_solicitacao = 0
+        self.xcn = 0
 
         self.whiteboard = Whiteboard.get_instance()
 
@@ -74,17 +75,16 @@ class R2APanda(IR2A):
         self.tempo_ultima_solicitacao = solicitação_de_tempo_atual
 
         # Estimativa  
-        xcn = (self.k * (self.w - (self.xcn_m1 - self.xtn_m1 + self.w))) * intervalo_tempo_solicitacao_atual + self.xcn_m1
-        print('estimativa aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: ', xcn)
+        self.xcn = (self.k * (self.w - (self.xcn_m1 - self.xtn_m1 + self.w))) * intervalo_tempo_solicitacao_atual + self.xcn_m1
 
         #Suavização
 
         if self.ycn_m1 == 0:
-            self.ycn_m1 = xcn
+            self.ycn_m1 = self.xcn
             
 
         #EWMA adaptado
-        self.ycn = self.alpha * xcn + (1 - self.alpha) * self.ycn_m1
+        self.ycn = self.alpha * self.xcn + (1 - self.alpha) * self.ycn_m1
         
         #EWMA formula original
         #self.ycn = ((self.alpha - 1) * self.tempo_ultima_solicitação_global * (self.ycn_m1 - xcn)) + self.ycn_m1
@@ -127,6 +127,8 @@ class R2APanda(IR2A):
 
         # Plota a instabilidade
         self.plot_instabilidade()
+        
+        self.plot_ineficiencia(self.xcn)
 
 
         self.send_up(msg)
@@ -208,3 +210,29 @@ class R2APanda(IR2A):
         plt.legend()
         plt.grid(True)
         plt.savefig("grafico_instabilidade_tempo.png")
+        
+    def calcular_ineficiencia(self, C):
+        # Soma das taxas de transferência
+        soma_taxas = sum(self.taxa_transferencias)
+        print(soma_taxas)
+        print("CCCCCCCCCCCCCCCCCCCCCCCC", C)
+        # Calculando a ineficiência
+        ineficiencia = max(0, abs(soma_taxas - C)/1000) / C
+        
+        return ineficiencia
+
+    def plot_ineficiencia(self, C):
+        ineficiencia = self.calcular_ineficiencia(C)
+        
+        # Plotar a ineficiência ao longo do tempo
+        tempos = [i for i in range(len(self.taxa_transferencias))]
+
+        plt.figure(figsize=(10, 5))
+        plt.plot(tempos, [ineficiencia] * len(tempos), marker='x', color='red', label="Ineficiência")
+        plt.title("Ineficiência ao Longo do Tempo")
+        plt.xlabel("Tempo (s)")
+        plt.ylabel("Ineficiência")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig("grafico_ineficiencia_tempo.png")
+
