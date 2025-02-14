@@ -5,6 +5,7 @@ from statistics import harmonic_mean
 
 from base.whiteboard import Whiteboard
 
+import math
 import matplotlib.pyplot as plt
 
 class R2APanda(IR2A):
@@ -25,7 +26,7 @@ class R2APanda(IR2A):
         self.tempo_ultima_solicitacao = 0
         self.tempo_ultima_solicitação_global = 0
         self.tempo_proxima_solicitacao = 0
-        self.xcn = 0
+        self.xcn = 0        
 
         self.whiteboard = Whiteboard.get_instance()
 
@@ -114,6 +115,12 @@ class R2APanda(IR2A):
     def handle_segment_size_response(self, msg):
         self.xtn_m1 = msg.get_bit_length() / (perf_counter() - self.tempo_ultima_solicitacao)
         self.taxa_transferencias.append(self.xtn_m1)
+        
+        # Cálculo do Jain's Fairness Index
+        jain_fairness = self.calcular_jains_fairness_index(self.taxa_transferencias)
+        # Cálculo da Unfairness
+        unfairness = self.calcular_unfairness(jain_fairness)
+        
         print("----------------------------------------------------------")
         print("Tamanho buffers playbacks", self.whiteboard.get_playback_buffer_size())
         print("Tamanho Segmento no buffer", self.whiteboard.get_playback_segment_size_time_at_buffer())
@@ -129,6 +136,8 @@ class R2APanda(IR2A):
         self.plot_instabilidade()
         
         self.plot_ineficiencia(self.xcn)
+        
+        self.plot_unfairness(unfairness)
 
 
         self.send_up(msg)
@@ -235,4 +244,29 @@ class R2APanda(IR2A):
         plt.legend()
         plt.grid(True)
         plt.savefig("grafico_ineficiencia_tempo.png")
+        
+    def calcular_jains_fairness_index(self, rates):
+        n = len(rates)
+        soma_taxas = sum(rates)
+        soma_quadrados_taxas = sum([r**2 for r in rates])
+        
+        jain_fairness = (soma_taxas**2) / (n * soma_quadrados_taxas)
+        return jain_fairness
+        
+    def calcular_unfairness(self, jain_fairness):
+        # Calculando a Unfairness
+        unfairness = math.sqrt(1 - jain_fairness)
+        return unfairness
+
+    def plot_unfairness(self, unfairness):
+        tempos = [i for i in range(len(self.taxa_transferencias))]
+        
+        plt.figure(figsize=(10, 5))
+        plt.plot(tempos, [unfairness] * len(tempos), marker='x', color='purple', label="Unfairness")
+        plt.title("Unfairness ao Longo do Tempo")
+        plt.xlabel("Tempo (s)")
+        plt.ylabel("Unfairness")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig("grafico_unfairness_tempo.png")
 
