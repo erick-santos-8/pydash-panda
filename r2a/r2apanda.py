@@ -38,17 +38,14 @@ class R2APanda(IR2A):
         self.send_down(msg)
 
     def handle_xml_response(self, msg):
-        
-        # Taxa de transferencia é calculada pelo tamanho do segmento do video pelo tempo decorrido desde a ultima solicitação 
+        # Taxa de transferência calculada
         self.xtn_m1 = msg.get_bit_length() / (perf_counter() - self.tempo_ultima_solicitacao)
 
-        # Ultiam estimativa de taxa de transferencia é igual a taxa de transferencia calculada
+        # Estimativa de taxa de transferência
         self.xcn_m1 = self.xtn_m1
 
-        # Adiciona a taxa de transferencia calculada à lista de taxas de transferencia calculadas
+        # Atualizando as listas de taxas
         self.taxa_transferencias.append(self.xtn_m1)
-
-        # Adiciona a taxa de transferencia estimada à lista de taxas de transferencia estimadas
         self.taxa_transferencias_estimadas.append(self.xcn_m1)
 
 
@@ -135,9 +132,11 @@ class R2APanda(IR2A):
         # Plota a instabilidade
         self.plot_instabilidade()
         
-        self.plot_ineficiencia(self.xcn)
+        self.plot_ineficiencia()
         
         self.plot_unfairness(unfairness)
+        
+        self.plot_ineficiencia_instabilidade()
 
 
         self.send_up(msg)
@@ -220,18 +219,22 @@ class R2APanda(IR2A):
         plt.grid(True)
         plt.savefig("grafico_instabilidade_tempo.png")
         
-    def calcular_ineficiencia(self, C):
-        # Soma das taxas de transferência
+    def calcular_ineficiencia(self):
+        C = sum(self.taxa_transferencias_estimadas)  # Soma das taxas estimadas, por exemplo
         soma_taxas = sum(self.taxa_transferencias)
-        print(soma_taxas)
-        print("CCCCCCCCCCCCCCCCCCCCCCCC", C)
-        # Calculando a ineficiência
-        ineficiencia = max(0, abs(soma_taxas - C)/1000) / C
+        print("CCCCCCCCCC: ", C)
+        print("TAXAAAAA: ", soma_taxas)
+        print((soma_taxas - C) / C)
+
+        if C > 0:
+            ineficiencia = max(0, (soma_taxas - C) / C)
+        else:
+            ineficiencia = 0
         
         return ineficiencia
 
-    def plot_ineficiencia(self, C):
-        ineficiencia = self.calcular_ineficiencia(C)
+    def plot_ineficiencia(self):
+        ineficiencia = self.calcular_ineficiencia()
         
         # Plotar a ineficiência ao longo do tempo
         tempos = [i for i in range(len(self.taxa_transferencias))]
@@ -270,3 +273,28 @@ class R2APanda(IR2A):
         plt.grid(True)
         plt.savefig("grafico_unfairness_tempo.png")
 
+    def plot_ineficiencia_instabilidade(self):
+        # Calcular a ineficiência a cada tempo
+        ineficiencia = [self.calcular_ineficiencia()] * len(self.taxa_transferencias)
+        
+        # Calcular a instabilidade
+        instabilidade = self.calcular_instabilidade()
+        
+        # Ajuste para que o número de pontos das duas listas seja igual
+        # Caso a instabilidade tenha menos pontos, estenda o último valor para o número de pontos de ineficiência
+        instabilidade_anterior = 0
+        if len(instabilidade) > 2 :
+            instabilidade_anterior = instabilidade[-1]
+            
+        if len(instabilidade) < len(ineficiencia):
+            instabilidade = instabilidade + [instabilidade_anterior] * (len(ineficiencia) - len(instabilidade))
+
+        # Plotando a relação entre ineficiência e instabilidade
+        plt.figure(figsize=(10, 5))
+        plt.plot(ineficiencia, instabilidade, marker='o', color='orange', label="Relação Ineficiência vs Instabilidade")
+        plt.title("Relação entre Ineficiência e Instabilidade")
+        plt.xlabel("Ineficiência")
+        plt.ylabel("Instabilidade")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig("grafico_ineficiencia_instabilidade.png")
