@@ -1,6 +1,7 @@
 from r2a.ir2a import IR2A
 from player.parser import *
 from time import perf_counter, sleep
+from statistics import harmonic_mean
 
 from base.whiteboard import Whiteboard
 
@@ -124,6 +125,10 @@ class R2APanda(IR2A):
         self.plot_tamanho_buffers()
         self.plot_taxas_transferencia()
 
+        # Plota a instabilidade
+        self.plot_instabilidade()
+
+
         self.send_up(msg)
         pass
 
@@ -169,3 +174,37 @@ class R2APanda(IR2A):
         plt.legend()
         plt.grid(True)
         plt.savefig("grafico_taxas_transferencia_tempo.png")
+        
+    def calcular_instabilidade(self):
+        k = 20  # Número de amostras (segundos)
+        instabilidade = []
+
+        # Verifique se há pelo menos 'k' amostras
+        if len(self.taxa_transferencias) < k:
+            return instabilidade
+
+        for t in range(k, len(self.taxa_transferencias)):
+            numerador = sum(abs(self.taxa_transferencias[t-d] - self.taxa_transferencias[t-d-1]) * (k - d) for d in range(k))
+            denominador = sum(self.taxa_transferencias[t-d] * (k - d) for d in range(k))
+            
+            if denominador != 0:
+                instabilidade.append(numerador / denominador)
+            else:
+                instabilidade.append(0)  # Evitar divisão por zero
+
+        return instabilidade
+
+    def plot_instabilidade(self):
+        instabilidade = self.calcular_instabilidade()
+        
+        # Plotar a instabilidade ao longo do tempo
+        tempos = [i for i in range(len(instabilidade))]
+
+        plt.figure(figsize=(10, 5))
+        plt.plot(tempos, instabilidade, marker='o', color='green', label="Instabilidade")
+        plt.title("Instabilidade ao Longo do Tempo")
+        plt.xlabel("Tempo (s)")
+        plt.ylabel("Instabilidade")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig("grafico_instabilidade_tempo.png")
