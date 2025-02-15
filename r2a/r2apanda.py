@@ -1,7 +1,7 @@
 from r2a.ir2a import IR2A
 from player.parser import *
 from time import perf_counter, sleep
-from statistics import harmonic_mean
+from statistics import harmonic_mean, stdev
 
 from base.whiteboard import Whiteboard
 
@@ -82,7 +82,7 @@ class R2APanda(IR2A):
         self.ycn = self.alpha * self.xcn + (1 - self.alpha) * self.ycn_m1
         
         #EWMA formula original
-        #self.ycn = ((self.alpha - 1) * self.tempo_ultima_solicitação_global * (self.ycn_m1 - xcn)) + self.ycn_m1
+        #self.ycn = ((self.alpha - 1) * self.tempo_ultima_solicitação_global * (self.ycn_m1 - self.xcn)) + self.ycn_m1
 
         self.taxa_transferencias_estimadas.append(self.ycn)
         self.ycn_m1 = self.ycn
@@ -93,7 +93,7 @@ class R2APanda(IR2A):
         msg.add_quality_id(lista_selecionada)
 
         #Agendamento
-        buffer_minimo = 15
+        buffer_minimo = 26
         self.tempo_proxima_solicitacao = ((lista_selecionada * msg.get_segment_size())/self.ycn) + (self.beta * (self.tamanho_utlimo_buffer - buffer_minimo))
         self.tamanho_utlimo_buffer = self.whiteboard.get_amount_video_to_play() #Atualiza o estado do buffer com a qualidade de video restante para a reprodução.
 
@@ -102,25 +102,12 @@ class R2APanda(IR2A):
     def handle_segment_size_response(self, msg):
         self.xtn_m1 = msg.get_bit_length() / (perf_counter() - self.tempo_ultima_solicitacao)
         self.taxa_transferencias.append(self.xtn_m1)
-        
-        # Cálculo do Jain's Fairness Index
-        jain_fairness = self.calcular_jains_fairness_index(self.taxa_transferencias)
-        # Cálculo da Unfairness
-        unfairness = self.calcular_unfairness(jain_fairness)
 
-        self.plot_filas()
-        self.plot_tamanho_buffers()
-        self.plot_taxas_transferencia()
-
-        # Plota a instabilidade
-        self.plot_instabilidade()
-        
-        self.plot_ineficiencia()
-        
-        self.plot_unfairness(unfairness)
-        
-        self.plot_ineficiencia_instabilidade()
-
+        self.grafico_filas()
+        self.grafico_taxas_transferencia()
+        self.grafico_instabilidade()
+        self.grafico_desvio_padrao_transferencias()
+        self.grafico_distribuicao_taxas()
 
         self.send_up(msg)
         pass
@@ -131,9 +118,8 @@ class R2APanda(IR2A):
     def finalization(self):
         pass 
 
-    def plot_filas(self):
-        dados = self.whiteboard.get_playback_qi()  # Exemplo: [(tempo1, taxa1), (tempo2, taxa2)]
-        print("KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK", dados)
+    def grafico_filas(self):
+        dados = self.whiteboard.get_playback_qi() 
         tempos, taxas = zip(*dados) if dados else ([], [])
 
         plt.figure(figsize=(10, 5))
@@ -144,19 +130,8 @@ class R2APanda(IR2A):
         plt.grid(True)
         plt.savefig("grafico_fila_tempo.png")
     
-    def plot_tamanho_buffers(self):
-        dados_buffer = self.whiteboard.get_playback_buffer_size()
-        tempos_buffer, tamanhos_buffer = zip(*dados_buffer) if dados_buffer else ([], [])
 
-        plt.figure(figsize=(10, 5))
-        plt.plot(tempos_buffer, tamanhos_buffer, marker='x', color='red', label="Tamanho do buffer")
-        plt.title("Tamanho do Buffer ao Longo do Tempo")
-        plt.xlabel("Tempo (s)")
-        plt.ylabel("Tamanho do Buffer")
-        plt.grid(True)
-        plt.savefig("grafico_buffer_tempo.png")
-
-    def plot_taxas_transferencia(self):
+    def grafico_taxas_transferencia(self):
         tempos = [i for i in range(len(self.taxa_transferencias))]
         plt.figure(figsize=(10, 5))
         plt.plot(tempos, self.taxa_transferencias, marker='o', label="Taxa de Transferência Real")
@@ -169,10 +144,9 @@ class R2APanda(IR2A):
         plt.savefig("grafico_taxas_transferencia_tempo.png")
         
     def calcular_instabilidade(self):
-        k = 20  # Número de amostras (segundos)
+        k = 20  # Número de amostras 
         instabilidade = []
-
-        # Verifique se há pelo menos 'k' amostras
+        
         if len(self.taxa_transferencias) < k:
             return instabilidade
 
@@ -183,14 +157,12 @@ class R2APanda(IR2A):
             if denominador != 0:
                 instabilidade.append(numerador / denominador)
             else:
-                instabilidade.append(0)  # Evitar divisão por zero
+                instabilidade.append(0)  # Evita a divisão por zero
 
         return instabilidade
 
-    def plot_instabilidade(self):
+    def grafico_instabilidade(self):
         instabilidade = self.calcular_instabilidade()
-        
-        # Plotar a instabilidade ao longo do tempo
         tempos = [i for i in range(len(instabilidade))]
 
         plt.figure(figsize=(10, 5))
@@ -202,82 +174,28 @@ class R2APanda(IR2A):
         plt.grid(True)
         plt.savefig("grafico_instabilidade_tempo.png")
         
-    def calcular_ineficiencia(self):
-        C = sum(self.taxa_transferencias_estimadas)  # Soma das taxas estimadas, por exemplo
-        soma_taxas = sum(self.taxa_transferencias)
-        print("CCCCCCCCCC: ", C)
-        print("TAXAAAAA: ", soma_taxas)
-        print((soma_taxas - C) / C)
-
-        if C > 0:
-            ineficiencia = max(0, (soma_taxas - C) / C)
-        else:
-            ineficiencia = 0
+    
+    def grafico_desvio_padrao_transferencias(self):
+        if len(self.taxa_transferencias) < 2:
+            return
         
-        return ineficiencia
-
-    def plot_ineficiencia(self):
-        ineficiencia = self.calcular_ineficiencia()
+        desvios = [stdev(self.taxa_transferencias[:i+1]) for i in range(1, len(self.taxa_transferencias))]
+        tempos = range(1, len(desvios) + 1)
         
-        # Plotar a ineficiência ao longo do tempo
-        tempos = [i for i in range(len(self.taxa_transferencias))]
-
         plt.figure(figsize=(10, 5))
-        plt.plot(tempos, [ineficiencia] * len(tempos), marker='x', color='red', label="Ineficiência")
-        plt.title("Ineficiência ao Longo do Tempo")
+        plt.plot(tempos, desvios, marker='o', color='purple', label="Desvio Padrão das Taxas")
+        plt.title("Desvio Padrão das Taxas de Transferência")
         plt.xlabel("Tempo (s)")
-        plt.ylabel("Ineficiência")
+        plt.ylabel("Desvio Padrão")
         plt.legend()
         plt.grid(True)
-        plt.savefig("grafico_ineficiencia_tempo.png")
-        
-    def calcular_jains_fairness_index(self, rates):
-        n = len(rates)
-        soma_taxas = sum(rates)
-        soma_quadrados_taxas = sum([r**2 for r in rates])
-        
-        jain_fairness = (soma_taxas**2) / (n * soma_quadrados_taxas)
-        return jain_fairness
-        
-    def calcular_unfairness(self, jain_fairness):
-        # Calculando a Unfairness
-        unfairness = math.sqrt(1 - jain_fairness)
-        return unfairness
-
-    def plot_unfairness(self, unfairness):
-        tempos = [i for i in range(len(self.taxa_transferencias))]
-        
+        plt.savefig("grafico_desvio_padrao.png")
+    
+    def grafico_distribuicao_taxas(self):
         plt.figure(figsize=(10, 5))
-        plt.plot(tempos, [unfairness] * len(tempos), marker='x', color='purple', label="Unfairness")
-        plt.title("Unfairness ao Longo do Tempo")
-        plt.xlabel("Tempo (s)")
-        plt.ylabel("Unfairness")
-        plt.legend()
+        plt.hist(self.taxa_transferencias, bins=20, color='blue', edgecolor='black', alpha=0.7)
+        plt.title("Distribuição das Taxas de Transferência")
+        plt.xlabel("Taxa de Transferência (bits/s)")
+        plt.ylabel("Frequência")
         plt.grid(True)
-        plt.savefig("grafico_unfairness_tempo.png")
-
-    def plot_ineficiencia_instabilidade(self):
-        # Calcular a ineficiência a cada tempo
-        ineficiencia = [self.calcular_ineficiencia()] * len(self.taxa_transferencias)
-        
-        # Calcular a instabilidade
-        instabilidade = self.calcular_instabilidade()
-        
-        # Ajuste para que o número de pontos das duas listas seja igual
-        # Caso a instabilidade tenha menos pontos, estenda o último valor para o número de pontos de ineficiência
-        instabilidade_anterior = 0
-        if len(instabilidade) > 2 :
-            instabilidade_anterior = instabilidade[-1]
-            
-        if len(instabilidade) < len(ineficiencia):
-            instabilidade = instabilidade + [instabilidade_anterior] * (len(ineficiencia) - len(instabilidade))
-
-        # Plotando a relação entre ineficiência e instabilidade
-        plt.figure(figsize=(10, 5))
-        plt.plot(ineficiencia, instabilidade, marker='o', color='orange', label="Relação Ineficiência vs Instabilidade")
-        plt.title("Relação entre Ineficiência e Instabilidade")
-        plt.xlabel("Ineficiência")
-        plt.ylabel("Instabilidade")
-        plt.legend()
-        plt.grid(True)
-        plt.savefig("grafico_ineficiencia_instabilidade.png")
+        plt.savefig("grafico_distribuicao_taxas.png")
