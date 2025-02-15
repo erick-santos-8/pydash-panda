@@ -54,7 +54,6 @@ class R2APanda(IR2A):
 
         # Adiciona a lista de qualidades do video à lista de listas de qualidades do video
         self.lista_segmentos = parsed_mpd.get_qi()
-       
         # Proxima função  
         self.send_up(msg)
 
@@ -76,39 +75,30 @@ class R2APanda(IR2A):
         self.xcn = (self.k * (self.w - (self.xcn_m1 - self.xtn_m1 + self.w))) * intervalo_tempo_solicitacao_atual + self.xcn_m1
 
         #Suavização
-
         if self.ycn_m1 == 0:
             self.ycn_m1 = self.xcn
-            
 
         #EWMA adaptado
         self.ycn = self.alpha * self.xcn + (1 - self.alpha) * self.ycn_m1
         
         #EWMA formula original
         #self.ycn = ((self.alpha - 1) * self.tempo_ultima_solicitação_global * (self.ycn_m1 - xcn)) + self.ycn_m1
+
         self.taxa_transferencias_estimadas.append(self.ycn)
         self.ycn_m1 = self.ycn
-        print('suavização: fffffffffffffffffffff', self.ycn)
         
         #Quantização
         lista_selecionada = min(self.lista_segmentos, key=lambda seg: abs(seg - self.ycn), default=0)
     
         msg.add_quality_id(lista_selecionada)
 
-        print("quantização: sssssssssssssssssssss", lista_selecionada)
-
         #Agendamento
         buffer_minimo = 15
         self.tempo_proxima_solicitacao = ((lista_selecionada * msg.get_segment_size())/self.ycn) + (self.beta * (self.tamanho_utlimo_buffer - buffer_minimo))
-
         self.tamanho_utlimo_buffer = self.whiteboard.get_amount_video_to_play() #Atualiza o estado do buffer com a qualidade de video restante para a reprodução.
 
-        print("agendamento: bbbbbbbbbbbbbbbbbbbbbbbbbbbb", self.tempo_proxima_solicitacao)
-
         self.send_down(msg)
-
         
-
     def handle_segment_size_response(self, msg):
         self.xtn_m1 = msg.get_bit_length() / (perf_counter() - self.tempo_ultima_solicitacao)
         self.taxa_transferencias.append(self.xtn_m1)
@@ -117,13 +107,6 @@ class R2APanda(IR2A):
         jain_fairness = self.calcular_jains_fairness_index(self.taxa_transferencias)
         # Cálculo da Unfairness
         unfairness = self.calcular_unfairness(jain_fairness)
-        
-        print("----------------------------------------------------------")
-        print("Tamanho buffers playbacks", self.whiteboard.get_playback_buffer_size())
-        print("Tamanho Segmento no buffer", self.whiteboard.get_playback_segment_size_time_at_buffer())
-        print("Buffer maximo", self.whiteboard.get_max_buffer_size())
-        print("----------------------------------------------------------")
-        print("----------------------------------------------------------")
 
         self.plot_filas()
         self.plot_tamanho_buffers()
